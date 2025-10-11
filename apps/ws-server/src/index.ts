@@ -1,141 +1,33 @@
-import WebSocket, { WebSocketServer } from "ws";
-import jwt from "jsonwebtoken";
-import { JWT_SECRET } from "@repo/backend-common/config";
-import { prismaClient as prisma } from "@repo/db/client";
+import { WebSocketServer } from "ws";
+import { verifyToken } from "./utils/auth";
+import { addUser, removeUser } from "./state";
+import { handleEvent } from "./events/handlers";
+
 const wss = new WebSocketServer({ port: 8080 });
 
-interface Room {
-    roomId: string,
-    users: User[]
-}
+wss.on("connection", (ws, req) => {
+    const url = req.url;
+    if (!url) return ws.close(4001, "Missing URL");
 
-interface User {
-    userId: string,
-    ws: WebSocket
-}
+    const params = new URLSearchParams(url.split("?")[1]);
+    const token = params.get("token") || "";
 
-const rooms: Room[] = []
+    const payload = verifyToken(token);
+    if (!payload) return ws.close(4002, "Unauthorized");
 
-let users: User[] = []
+    const user = { userId: payload.userId, ws };
+    addUser(user);
 
-
-function checkUserWithToken(token: string): string | null {
-    try {
-        const decoded = jwt.verify(token, JWT_SECRET)
-        if (typeof decoded === "string") {
-            return null;
+    ws.on("message", (raw) => {
+        try {
+            const data = JSON.parse(raw.toString());
+            handleEvent(user, data);
+        } catch {
+            ws.send(JSON.stringify({ type: "error", message: "Invalid message format" }));
         }
-
-        if (!decoded || decoded.userId == null) {
-            return null;
-        }
-        return decoded.userId;
-    } catch (error) {
-        return null
-    }
-
-}
-wss.on("connection", function connection(ws, request) {
-
-    const url = request.url;
-    if (!url) return;
-
-    const queryParams = new URLSearchParams(url.split("?")[1]);
-
-    const token = queryParams.get("token") || "";
-
-    const userId = checkUserWithToken(token);
-
-    if (!userId) {
-        ws.close(4001, "Unauthorized");
-        return;
-    }
-
-    users.push({
-        userId,
-        ws
-    })
-
-    ws.on('message', async function message(data) {
-        let parsedData;
-
-        if (typeof data != "string") {
-            parsedData = JSON.stringify(data.toString());
-        } else { //{type:"join-room",roomId:100}
-            try {
-                parsedData = JSON.parse(data);
-            } catch (err) {
-                console.error("Invalid JSON received:");
-                return;
-            }
-        }
-
-        if (parsedData.type == "join-room") {
-            const user = users.find(x => x.ws == ws)
-            if (!user) return;
-            let room = rooms.find(x => x.roomId == parsedData.roomId)
-            if (!room) {
-                room = { roomId: parsedData.roomId, users: [] };
-                rooms.push(room);
-            }
-            room?.users.push(user)
-
-        }
-
-        if (parsedData.type == "leave-room") {
-            const room = rooms.find(x => x.roomId == parsedData.roomId)
-            if (room && room.users) {
-                room.users = room?.users.filter(x => x.ws != ws)
-            }
-
-            users = users.filter(x => x.ws != ws)
-
-            if (room && room.users.length === 0) {
-                rooms.splice(rooms.indexOf(room), 1);
-            }
-
-        }
-
-        if (parsedData.type == "chat") {
-            const msg = parsedData.message;
-            const roomId = parsedData.roomId;
-
-            const user = users.find(u => u.ws == ws)
-            if (!user) return
-            await prisma.chat.create({
-                data: {
-                    message: msg,
-                    roomId,
-                    userId: userId
-
-                }
-            })
-
-            //find out the room
-            const room = rooms.find(x => x.roomId == roomId)
-
-            room?.users.forEach(user => user.ws.send(
-                JSON.stringify({
-                    type: "chat",
-                    message: msg,
-                    roomId,
-                    senderId: userId
-                })
-            ))
-        }
-
-
-    })
-
-
-    ws.on("close", () => {
-        users = users.filter(u => u.ws !== ws);
-        rooms.forEach(room => {
-            room.users = room.users.filter(u => u.ws !== ws);
-        });
     });
 
+    ws.on("close", () => removeUser(user.userId));
+});
 
-
-
-})
+console.log("WS server running on ws://localhost:8080");
