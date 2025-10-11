@@ -6,24 +6,34 @@ import { CreateUserSchema, SignInSchema, CreateRoomSchema } from "@repo/common/s
 import { prismaClient as prisma } from "@repo/db/client";
 import cors from "cors";
 import bcrypt from "bcryptjs";
+import cookieParser from "cookie-parser";
 
 const app = express();
 app.use(express.json());
-app.use(cors())
+
+app.use(cookieParser())
+app.use(cors(
+    {
+        origin: "http://localhost:3000",
+        credentials: true
+    }
+))
 
 app.post("/signup", async (req, res) => {
 
-    const parsedData = CreateUserSchema.safeParse(req.body);
-
-    if (!parsedData.success) {
-        console.log(parsedData.error)
-        res.json({
-            message: "Incorrect inputs"
-        })
-        return;
-    }
+    console.log(req.body)
 
     try {
+        const parsedData = CreateUserSchema.safeParse(req.body);
+
+        if (!parsedData.success) {
+            console.log(parsedData.error)
+            res.json({
+                message: "Incorrect inputs"
+            })
+            return;
+        }
+
         const user = parsedData.data
 
         const hashedPassword = await bcrypt.hash(user.password, 10);
@@ -48,23 +58,21 @@ app.post("/signup", async (req, res) => {
         })
     }
 
-    //save to db later
 });
 
 app.post("/login", async (req, res) => {
 
-    const parsedData = SignInSchema.safeParse(req.body);
-
-    if (!parsedData.success) {
-        console.log(parsedData.error)
-
-        res.json({
-            message: "Incorrect inputs"
-        })
-        return;
-    }
 
     try {
+
+        const parsedData = SignInSchema.safeParse(req.body);
+        if (!parsedData.success) {
+            console.log(parsedData.error)
+            res.json({
+                message: "Incorrect inputs"
+            })
+            return;
+        }
         const { email, password } = parsedData.data
 
         const user = await prisma.user.findUnique({
@@ -90,7 +98,23 @@ app.post("/login", async (req, res) => {
         }
 
         const token = jwt.sign({ userId: user.id }, JWT_SECRET);
-        res.json({ token });
+        res.cookie("token", token, {
+            httpOnly: true,
+            sameSite: "none",
+            secure: process.env.NODE_ENV === "production",
+            maxAge: 60 * 60 * 24 * 30, // 30 days
+            path: "/",
+            domain: "localhost",
+        }).json({
+            message: "Login successful",
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                photo: user.photo || "",
+                token: token
+            },
+        });
 
     } catch (error) {
         res.status(400).json({
@@ -100,24 +124,46 @@ app.post("/login", async (req, res) => {
 
 });
 
+app.get("/me", async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ message: "Not authenticated" });
+
+    try {
+        const payload = jwt.verify(token, JWT_SECRET) as { userId: string };
+        const user = await prisma.user.findUnique({ where: { id: payload.userId } });
+
+        if (!user) return res.status(401).json({ message: "User not found" });
+
+        res.json({
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            photo: user.photo || "",
+            token: token
+        });
+    } catch {
+        res.status(401).json({ message: "Invalid token" });
+    }
+});
+
 
 
 app.post("/room", authMiddleware, async (req, res) => {
 
-    const parsedData = CreateRoomSchema.safeParse(req.body);
-
-    if (!parsedData.success) {
-        console.log(parsedData.error)
-
-        res.json({
-            message: "Incorrect inputs"
-        })
-        return;
-    }
-
-    const userId = (req as RequestWithUserId).userId;
 
     try {
+        const parsedData = CreateRoomSchema.safeParse(req.body);
+
+        if (!parsedData.success) {
+            console.log(parsedData.error)
+
+            res.json({
+                message: "Incorrect inputs"
+            })
+            return;
+        }
+
+        const userId = (req as RequestWithUserId).userId;
 
         const room = await prisma.room.create({
             data: {
@@ -144,7 +190,7 @@ app.post("/room", authMiddleware, async (req, res) => {
     //create a room and return 
 });
 
-app.get("chats/:roomId", authMiddleware, async (req, res) => {
+app.get("/chats/:roomId", authMiddleware, async (req, res) => {
 
     try {
         const roomId = Number(req.params.roomId);
