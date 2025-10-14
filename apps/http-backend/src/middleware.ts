@@ -6,7 +6,14 @@ export interface RequestWithUserId extends Request {
     userId: string;
 }
 export function authMiddleware(req: Request, res: Response, next: NextFunction) {
-    const token = req.headers.authorization;
+    console.log("authMiddleware", req);
+    let token = req.headers.authorization;
+
+    if (!token) {
+        token = req.cookies.token;
+    }
+    console.log(req.headers)
+    console.log("token", token);
     if (!token) {
         return res.status(401).json({ message: "Unauthorized" });
     }

@@ -62,7 +62,6 @@ app.post("/signup", async (req, res) => {
 
 app.post("/login", async (req, res) => {
 
-
     try {
 
         const parsedData = SignInSchema.safeParse(req.body);
@@ -99,12 +98,9 @@ app.post("/login", async (req, res) => {
 
         const token = jwt.sign({ userId: user.id }, JWT_SECRET);
         res.cookie("token", token, {
-            httpOnly: true,
-            sameSite: "none",
-            secure: process.env.NODE_ENV === "production",
+
             maxAge: 60 * 60 * 24 * 30, // 30 days
             path: "/",
-            domain: "localhost",
         }).json({
             message: "Login successful",
             user: {
@@ -124,22 +120,23 @@ app.post("/login", async (req, res) => {
 
 });
 
-app.get("/me", async (req, res) => {
-    const token = req.cookies.token;
-    if (!token) return res.status(401).json({ message: "Not authenticated" });
+app.get("/me", authMiddleware, async (req, res) => {
 
+    const userId = (req as RequestWithUserId).userId
+
+    if (!userId) {
+        res.status(401).json({
+            message: "Unauthorized"
+        })
+    }
     try {
-        const payload = jwt.verify(token, JWT_SECRET) as { userId: string };
-        const user = await prisma.user.findUnique({ where: { id: payload.userId } });
+
+        const user = await prisma.user.findUnique({ where: { id: userId } });
 
         if (!user) return res.status(401).json({ message: "User not found" });
 
         res.json({
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            photo: user.photo || "",
-            token: token
+            user
         });
     } catch {
         res.status(401).json({ message: "Invalid token" });
@@ -149,8 +146,6 @@ app.get("/me", async (req, res) => {
 
 
 app.post("/room", authMiddleware, async (req, res) => {
-
-
     try {
         const parsedData = CreateRoomSchema.safeParse(req.body);
 
@@ -179,16 +174,63 @@ app.post("/room", authMiddleware, async (req, res) => {
             }
         })
 
-    } catch (error) {
-        console.log(error)
-        res.status(400).json({
-            message: "Error creating the room",
+    } catch (error: any) {
+        if (error.code === "P2002") {
+            const target = Array.isArray(error.meta?.target)
+                ? error.meta.target.join(", ")
+                : "field";
 
-        })
+            return res.status(400).json({
+                message: `Room with this name already exists.`,
+            });
+        }
+
+        console.error("Room creation error:", error);
+        return res.status(500).json({
+            message: "Something went wrong while creating the room.",
+        });
     }
 
     //create a room and return 
 });
+
+app.delete("/room/:roomId", authMiddleware, async (req, res) => {
+    try {
+        const roomId = Number(req.params.roomId);
+        if (isNaN(roomId)) {
+            return res.status(400).json({
+                message: "Invalid room ID"
+            })
+        }
+        // const room = await prisma.room.findUnique({
+        //     where: {
+        //         id: roomId
+        //     }
+        // })
+
+        // if (!room) {
+        //     return res.status(404).json({
+        //         message: "Room not found"
+        //     })
+        // }
+
+        await prisma.room.delete({
+            where: {
+                id: roomId
+            }
+        })
+
+        res.json({
+            message: "Room deleted successfully"
+        })
+
+    } catch (error) {
+        console.error("Room deletion error:", error);
+        return res.status(500).json({
+            message: "Something went wrong while deleting the room.",
+        });
+    }
+})
 
 app.get("/shapes/:roomId", authMiddleware, async (req, res) => {
 
@@ -229,6 +271,42 @@ app.get("/room/:slug", async (req, res) => {
         })
         res.json({
             room
+        })
+    } catch (error) {
+
+    }
+})
+
+app.get("/rooms", authMiddleware, async (req, res) => {
+    const userId = (req as RequestWithUserId).userId;
+
+    try {
+        const rooms = await prisma.room.findMany({
+            where: {
+                deletedAt: null,
+                OR: [
+                    {
+                        participants: {
+                            some: {
+                                userId: userId,
+                            },
+                        },
+                    },
+                    {
+                        adminId: userId,
+                    },
+                ],
+            },
+            include: {
+                participants: true,
+            },
+            orderBy: {
+                createdAt: "desc",
+
+            }
+        })
+        res.json({
+            rooms
         })
     } catch (error) {
 

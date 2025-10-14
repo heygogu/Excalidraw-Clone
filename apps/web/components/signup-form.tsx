@@ -12,12 +12,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { useForm, Controller } from "react-hook-form";
 import { useMutation } from "@tanstack/react-query";
-import { signup } from "@/actions/login";
+import { signup } from "@/actions/action";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "sonner";
 import { Spinner } from "./ui/spinner";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 const formSchema = z
   .object({
@@ -50,10 +51,12 @@ export function SignupForm({
     },
   });
 
+  const router = useRouter();
   const { mutate, isPending } = useMutation({
     mutationFn: signup,
     onSuccess: () => {
       toast.success("Registeration Successfull", { id: "Signup-user" });
+      router.push("/login");
     },
     onError: (err) => {
       toast.error(err.message || "Failed to register user", {

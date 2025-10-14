@@ -64,15 +64,15 @@ const Room = ({ params }: { params: { id: string } }) => {
     selectedShapeIndexRef.current = selectedShapeIndex;
   }, [zoom, panOffset, selectedTool, currentProperties, selectedShapeIndex]);
 
-  const handleTextEdit = (index: number, shape: Shape) => {
-    setEditingTextIndex(index);
-    setTextPosition({
-      screen: { x: shape.startX, y: shape.startY },
-      canvas: { x: shape.startX, y: shape.startY },
-    });
-    setCurrentText(shape.text || "");
-    setIsEditingText(true);
-  };
+  // const handleTextEdit = (index: number, shape: Shape) => {
+  //   setEditingTextIndex(index);
+  //   setTextPosition({
+  //     screen: { x: shape.startX, y: shape.startY },
+  //     canvas: { x: shape.startX, y: shape.startY },
+  //   });
+  //   setCurrentText(shape.text || "");
+  //   setIsEditingText(true);
+  // };
 
   const handleCanvasBgChange = (color: string, e: React.MouseEvent) => {
     e.preventDefault();

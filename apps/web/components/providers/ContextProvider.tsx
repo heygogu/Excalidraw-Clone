@@ -2,6 +2,7 @@
 import { createContext, useState } from "react";
 import { useEffect, useContext } from "react";
 import { api } from "@/lib/axios";
+import { useFetchUser } from "@/hooks/useUserFetcher";
 
 interface User {
   name: string;
@@ -47,18 +48,26 @@ export function ContextProvider({ children }: { children: React.ReactNode }) {
 export function UserLoader({ children }: { children: React.ReactNode }) {
   const { setUser } = useContext(Context);
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await api.get("/me", { withCredentials: true });
-        setUser({ ...res.data });
-      } catch (err) {
-        setUser({ id: "", name: "", email: "", photo: "", token: "" });
-      }
-    };
+  const { data, isLoading } = useFetchUser();
 
-    fetchUser();
-  }, []);
+  // useEffect(() => {
+  //   const fetchUser = async () => {
+  //     try {
+  //       const res = await api.get("/me", { withCredentials: true });
+  //       setUser({ ...res.data.user });
+  //     } catch (err) {
+  //       setUser({ id: "", name: "", email: "", photo: "", token: "" });
+  //     }
+  //   };
+
+  //   fetchUser();
+  // }, []);
+
+  useEffect(() => {
+    if (data) {
+      setUser(data);
+    }
+  }, [data]);
 
   return <>{children}</>;
 }

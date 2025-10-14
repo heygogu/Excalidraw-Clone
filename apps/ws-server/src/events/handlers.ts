@@ -1,9 +1,9 @@
 import { User, rooms } from "../state";
 import { prismaClient as prisma } from "@repo/db/client";
 
-// In-memory queue for DB writes
+
 interface Job {
-    type: "chat" | "shape";
+    type: "chat" | "shape:create" | "shape:update";
     roomId: string;
     userId: string;
     payload: any;
@@ -32,15 +32,44 @@ async function processQueue() {
                         message: job.payload.message,
                     },
                 });
-            } else if (job.type === "shape") {
-                // await prisma.shape.create({
-                //     data: {
-                //         roomId: job.roomId,
-                //         userId: job.userId,
-                //         type: job.payload.type,
-                //         data: job.payload.data,
-                //     },
-                // });
+            } else if (job.type === "shape:create") {
+                await prisma.shape.create({
+                    data: {
+                        roomId: Number(job.roomId),
+                        userId: job.userId,
+                        type: job.payload.type,
+                        strokeColor: job.payload.strokeColor ?? "black",
+                        fillColor: job.payload.fillColor ?? "transparent",
+                        strokeWidth: job.payload.strokeWidth ?? 1,
+                        strokeStyle: job.payload.strokeStyle ?? "solid",
+                        fillStyle: job.payload.fillStyle ?? "none",
+                        points: job.payload.points ?? [],
+                        text: job.payload.text ?? "",
+                        fontSize: job.payload.fontSize ?? 12,
+                    },
+                });
+            }
+            else if (job.type === "shape:update") {
+                await prisma.shape.update({
+                    where: {
+                        id: job.payload.id,
+                    },
+                    data: {
+                        startX: job.payload.startX,
+                        startY: job.payload.startY,
+                        width: job.payload.width,
+                        height: job.payload.height,
+                        type: job.payload.type,
+                        strokeColor: job.payload.strokeColor,
+                        fillColor: job.payload.fillColor,
+                        strokeWidth: job.payload.strokeWidth,
+                        strokeStyle: job.payload.strokeStyle,
+                        fillStyle: job.payload.fillStyle,
+                        points: job.payload.points,
+                        text: job.payload.text,
+                        fontSize: job.payload.fontSize,
+                    },
+                });
             }
         } catch (err) {
             console.error("DB write failed, retrying:", err);
@@ -52,7 +81,7 @@ async function processQueue() {
     processing = false;
 }
 
-// Handle events
+
 export function handleEvent(user: User, data: any) {
     switch (data.type) {
         case "join-room": {
@@ -66,7 +95,7 @@ export function handleEvent(user: User, data: any) {
 
             // notify other users
             room.forEach(u => {
-                if (u.ws !== user.ws) u.ws.send(JSON.stringify({ type: "user_joined", userId: user.userId }));
+                if (u.ws !== user.ws) u.ws.send(JSON.stringify({ type: "user_joined", userId: user?.name }));
             });
             break;
         }
@@ -76,6 +105,7 @@ export function handleEvent(user: User, data: any) {
             if (room) {
                 room.delete(user);
                 if (room.size === 0) rooms.delete(data.roomId);
+                user.ws.send(JSON.stringify({ type: "user_left_room", userId: user?.name }));
             }
             break;
         }
@@ -88,12 +118,28 @@ export function handleEvent(user: User, data: any) {
                     type: "chat",
                     message: data.message,
                     roomId: data.roomId,
-                    senderId: user.userId,
+                    userId: user.userId,
+                    username: user.name,
                 })));
             }
 
             // enqueue DB write
             enqueue({ type: "chat", roomId: data.roomId, userId: user.userId, payload: { message: data.message } });
+            break;
+        }
+
+        case "shape:create": {
+            const room = rooms.get(data.roomId);
+            if (room) {
+                room.forEach(u => u.ws.send(JSON.stringify({
+                    type: "shape:create",
+                    shape: data.shape,
+                    roomId: data.roomId,
+                    userId: user.userId,
+                    username: user.name,
+                })));
+            }
+            enqueue({ type: "shape:create", roomId: data.roomId, userId: user.userId, payload: data.shape });
             break;
         }
 
@@ -104,12 +150,12 @@ export function handleEvent(user: User, data: any) {
                     type: "shape:update",
                     shape: data.shape,
                     roomId: data.roomId,
-                    senderId: user.userId,
+                    userId: user.userId,
+                    username: user.name,
                 })));
             }
 
-            // enqueue DB write
-            enqueue({ type: "shape", roomId: data.roomId, userId: user.userId, payload: data.shape });
+            enqueue({ type: "shape:update", roomId: data.roomId, userId: user.userId, payload: data.shape });
             break;
         }
 

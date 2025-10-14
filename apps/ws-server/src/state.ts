@@ -2,11 +2,12 @@ import WebSocket from "ws";
 
 export interface User {
     userId: string;
+    name?: string;
     ws: WebSocket;
 }
 
-export const users = new Map<string, User>(); // userId -> User
-export const rooms = new Map<string, Set<User>>(); // roomId -> Set<User>
+export const users = new Map<string, User>();
+export const rooms = new Map<string, Set<User>>();
 
 export function addUser(user: User) {
     users.set(user.userId, user);

@@ -12,15 +12,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { useForm, Controller } from "react-hook-form";
 import { useMutation } from "@tanstack/react-query";
-import { login } from "@/actions/login";
+import { login } from "@/actions/action";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "sonner";
 import { Spinner } from "./ui/spinner";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { redirect, useRouter } from "next/navigation";
 import { useContext } from "react";
 import { Context } from "@/components/providers/ContextProvider";
+import { parseCookies, setCookie, destroyCookie } from "nookies";
 
 const formSchema = z.object({
   email: z.string().email({ message: "Invalid email" }),
@@ -50,7 +51,7 @@ export function LoginForm({
   const { mutate, isPending } = useMutation({
     mutationFn: login,
     onSuccess: (data) => {
-      toast.success("Login Successfull", { id: "login-user" });
+      toast.success("Login Successful", { id: "login-user" });
       setUser({
         id: data.user.id,
         name: data.user.name,
@@ -59,7 +60,12 @@ export function LoginForm({
         token: data.user.token,
       });
 
-      router.push("/");
+      setCookie(null, "token", data.user.token, {
+        path: "/",
+        maxAge: 60 * 60 * 24 * 30,
+      });
+
+      router.replace("/dashboard");
     },
     onError: (err) => {
       toast.error(err.message || "Failed to login user", { id: "login-user" });
