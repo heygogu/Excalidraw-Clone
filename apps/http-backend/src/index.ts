@@ -190,12 +190,12 @@ app.post("/room", authMiddleware, async (req, res) => {
     //create a room and return 
 });
 
-app.get("/chats/:roomId", authMiddleware, async (req, res) => {
+app.get("/shapes/:roomId", authMiddleware, async (req, res) => {
 
     try {
         const roomId = Number(req.params.roomId);
         //get all the messages of that room
-        const messages = await prisma.chat.findMany({
+        const messages = await prisma.shape.findMany({
             where: {
                 roomId: roomId
             },

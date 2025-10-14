@@ -29,7 +29,6 @@ export interface Shape {
     width: number;
     height: number;
     type: string;
-    rotation?: number;
     strokeWidth?: number;
     strokeColor?: string;
     fillColor?: string;
@@ -49,6 +48,35 @@ export interface ZoomContext {
 
 export type ToolType = "hand" | "select" | "rect" | "diamond" | "circle" | "arrow" | "line" | "eraser" | "text";
 
+enum ShapeType {
+    RECTANGLE,
+    CIRCLE,
+    LINE,
+    DIAMOND,
+    ARROW,
+    TEXT,
+}
+
+//make tooltype to enum converter 
+export function getToolTypeFromString(toolType: string): ShapeType {
+    switch (toolType) {
+        case "rect":
+            return ShapeType.RECTANGLE;
+        case "circle":
+            return ShapeType.CIRCLE;
+        case "line":
+            return ShapeType.LINE;
+        case "diamond":
+            return ShapeType.DIAMOND;
+        case "arrow":
+            return ShapeType.ARROW;
+        case "text":
+            return ShapeType.TEXT;
+        default:
+            return ShapeType.RECTANGLE;
+    }
+}
+
 export const tools = [
     { id: "hand", icon: Hand, label: "Hand" },
     { id: "select", icon: MousePointer2, label: "Select" },
@@ -61,6 +89,8 @@ export const tools = [
     { id: "text", icon: Type, label: "Text" },
     { id: "eraser", icon: Eraser, label: "Eraser" },
 ];
+
+
 
 
 export const pastelColors = [
