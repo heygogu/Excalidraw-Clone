@@ -15,12 +15,16 @@ wss.on("connection", (ws, req) => {
     const payload = verifyToken(token);
     if (!payload) return ws.close(4002, "Unauthorized");
 
-    const user = { userId: payload.userId, ws };
+    const user = { userId: payload.userId, name: payload.name ?? "John", ws };
     addUser(user);
+
 
     ws.on("message", (raw) => {
         try {
             const data = JSON.parse(raw.toString());
+            console.log(data)
+            //push roomId to rooms
+
             handleEvent(user, data);
         } catch {
             ws.send(JSON.stringify({ type: "error", message: "Invalid message format" }));

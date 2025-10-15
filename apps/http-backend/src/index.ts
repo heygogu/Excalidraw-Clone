@@ -21,13 +21,10 @@ app.use(cors(
 
 app.post("/signup", async (req, res) => {
 
-    console.log(req.body)
-
     try {
         const parsedData = CreateUserSchema.safeParse(req.body);
 
         if (!parsedData.success) {
-            console.log(parsedData.error)
             res.json({
                 message: "Incorrect inputs"
             })
@@ -66,7 +63,7 @@ app.post("/login", async (req, res) => {
 
         const parsedData = SignInSchema.safeParse(req.body);
         if (!parsedData.success) {
-            console.log(parsedData.error)
+
             res.json({
                 message: "Incorrect inputs"
             })
@@ -150,7 +147,6 @@ app.post("/room", authMiddleware, async (req, res) => {
         const parsedData = CreateRoomSchema.safeParse(req.body);
 
         if (!parsedData.success) {
-            console.log(parsedData.error)
 
             res.json({
                 message: "Incorrect inputs"
@@ -197,6 +193,7 @@ app.post("/room", authMiddleware, async (req, res) => {
 app.delete("/room/:roomId", authMiddleware, async (req, res) => {
     try {
         const roomId = Number(req.params.roomId);
+        const userId = (req as RequestWithUserId).userId;
         if (isNaN(roomId)) {
             return res.status(400).json({
                 message: "Invalid room ID"
@@ -216,7 +213,8 @@ app.delete("/room/:roomId", authMiddleware, async (req, res) => {
 
         await prisma.room.delete({
             where: {
-                id: roomId
+                id: roomId,
+                adminId: userId
             }
         })
 
@@ -237,7 +235,7 @@ app.get("/shapes/:roomId", authMiddleware, async (req, res) => {
     try {
         const roomId = Number(req.params.roomId);
         //get all the messages of that room
-        const messages = await prisma.shape.findMany({
+        const shapes = await prisma.shape.findMany({
             where: {
                 roomId: roomId
             },
@@ -247,13 +245,10 @@ app.get("/shapes/:roomId", authMiddleware, async (req, res) => {
             take: 1000
         })
 
-        res.json({
-            messages
-        })
+        res.json(shapes)
     } catch (error) {
-        console.log(error)
         res.status(400).json({
-            messages: [],
+            shapes: [],
             message: "Something went wrong"
         })
     }

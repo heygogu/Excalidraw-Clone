@@ -147,7 +147,7 @@ function RoomCard({ room, user }: { room: Room; user: UserLike | null }) {
   };
 
   const { mutate } = useMutation({
-    mutationFn: deleteRoom,
+    mutationFn: (targetId: string) => deleteRoom(targetId),
     onSuccess: () => {
       toast.success("Room deleted successfully");
       queryClient.invalidateQueries({ queryKey: ["rooms"] });
@@ -183,19 +183,19 @@ function RoomCard({ room, user }: { room: Room; user: UserLike | null }) {
             {room.slug.charAt(0).toUpperCase()}
           </span>
         </div>
+        </div> */}
+
+      {/* Content */}
+      <div className='p-4 relative'>
         {room.adminId === user?.id && (
           <Badge
-            className='absolute top-3 right-3'
-            variant='secondary'
+            className='absolute -top-4 right-2'
+            variant='default'
             aria-label='You are the admin'>
             <Crown className='w-3 h-3 mr-1' />
             Admin
           </Badge>
         )}
-      </div> */}
-
-      {/* Content */}
-      <div className='p-4'>
         <div className='flex items-start justify-between mb-3'>
           <div className='flex-1 min-w-0'>
             <h3 className='font-semibold text-lg truncate group-hover:text-primary transition-colors'>
@@ -252,7 +252,7 @@ function RoomCard({ room, user }: { room: Room; user: UserLike | null }) {
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                       <AlertDialogAction
-                        onSelect={() => handleRoomDelete()}
+                        onClick={handleRoomDelete}
                         className='bg-destructive text-white'>
                         Continue
                       </AlertDialogAction>
@@ -298,8 +298,8 @@ function RoomCard({ room, user }: { room: Room; user: UserLike | null }) {
             asChild
             className='flex-1'
             size='sm'
-            aria-label={`Open ${room.slug}`}>
-            <Link href={`/board/${room.slug}`}>
+            aria-label={`Open ${room.id}`}>
+            <Link href={`/board/${room.id}`}>
               <ExternalLink className='w-4 h-4 mr-2' />
               Open
             </Link>

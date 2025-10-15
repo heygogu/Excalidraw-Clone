@@ -23,7 +23,10 @@ import {
     Type,
 } from "lucide-react";
 
+import { ShapeType } from "@repo/db/client";
+
 export interface Shape {
+    id: string,
     startX: number;
     startY: number;
     width: number;
@@ -48,14 +51,7 @@ export interface ZoomContext {
 
 export type ToolType = "hand" | "select" | "rect" | "diamond" | "circle" | "arrow" | "line" | "eraser" | "text";
 
-enum ShapeType {
-    RECTANGLE,
-    CIRCLE,
-    LINE,
-    DIAMOND,
-    ARROW,
-    TEXT,
-}
+
 
 //make tooltype to enum converter 
 export function getToolTypeFromString(toolType: string): ShapeType {

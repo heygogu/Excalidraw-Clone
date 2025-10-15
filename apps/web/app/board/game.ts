@@ -1,7 +1,9 @@
-import { Shape, ToolType, ZoomContext } from "./types";
+import { getToolTypeFromString, Shape, ToolType, ZoomContext } from "./types";
 import { repaintRect, repaintCircle, repaintLine, repaintDiamond, repaintArrow, repaintPencil, repaintText } from "./repaint";
+import { getAllShapesInRoom } from "@/actions/action";
+import { v4 as uuidv4 } from "uuid";
 
-let allDrawings: Shape[] = [];
+export let allDrawings: Shape[] = [];
 let currentPoints: { x: number; y: number }[] = [];
 
 
@@ -98,25 +100,25 @@ function renderPreviousShapes(
     // Draw all shapes
     allDrawings.forEach((shape, index) => {
         switch (shape.type) {
-            case "rect":
+            case "RECTANGLE":
                 repaintRect(ctx, shape);
                 break;
-            case "circle":
+            case "CIRCLE":
                 repaintCircle(ctx, shape);
                 break;
-            case "line":
+            case "LINE":
                 repaintLine(ctx, shape);
                 break;
-            case "diamond":
+            case "DIAMOND":
                 repaintDiamond(ctx, shape);
                 break;
-            case "arrow":
+            case "ARROW":
                 repaintArrow(ctx, shape);
                 break;
             // case "pencil":
             //     repaintPencil(ctx, shape);
             //     break;
-            case "text":
+            case "TEXT":
                 repaintText(ctx, shape);
                 break;
             default:
@@ -133,8 +135,10 @@ function renderPreviousShapes(
 
 
 
-export function initDrawing(
+export async function initDrawing(
     canvas: HTMLCanvasElement,
+    send: (data: any) => void,
+    roomId: number,
     getSelectedTool: () => ToolType,  // Changed to function
     getCurrentProperties: () => Partial<Shape>,  // Changed to function
     zoomContext: ZoomContext,
@@ -147,11 +151,28 @@ export function initDrawing(
         onZoom: (newZoom: number, newPan: { x: number; y: number }) => void;
     }
 ) {
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    //get all shapes in the room
+    async function getAllShapes() {
+        const res = await getAllShapesInRoom(roomId);
 
-    renderPreviousShapes(canvas, ctx, allDrawings, zoomContext);
+        console.log("first", res)
+        allDrawings = res
+        console.log("allDrawings", allDrawings)
+        if (!ctx || !canvas) return;
+        renderPreviousShapes(canvas, ctx, allDrawings, zoomContext);
+        send({
+            type: "join-room",
+            roomId
+        })
+    }
+
+    await getAllShapes();
+
+    //get all shapes in the room 
 
     let drawing = false;
     let dragging = false;
@@ -384,12 +405,15 @@ export function initDrawing(
         ctx.translate(pan.x, pan.y);
         ctx.scale(zoom, zoom);
 
+
+
         const currentShape = {
+            id: uuidv4(),
             startX,
             startY,
             width,
             height,
-            type: getSelectedTool(),
+            type: getToolTypeFromString(getSelectedTool()),
             ...getCurrentProperties()
         };
 
@@ -474,43 +498,37 @@ export function initDrawing(
 
         if (Math.abs(width) > 1 || Math.abs(height) > 1) {
             const currentProperties = getCurrentProperties();
-            allDrawings.push({
-                startX,
-                startY,
-                width,
-                height,
-                type: selectedTool,
-                ...currentProperties,
-            });
+            // allDrawings.push({
+            //     startX,
+            //     startY,
+            //     width,
+            //     height,
+            //     type: getToolTypeFromString(selectedTool),
+            //     ...currentProperties,
+            // });
+            send({
+                type: "shape:create",
+                roomId,
+                shape: {
+                    startX,
+                    startY,
+                    width,
+                    height,
+                    type: getToolTypeFromString(selectedTool),
+                    ...getCurrentProperties(),
+                }
+            })
+
+            // renderPreviousShapes(canvas, ctx, allDrawings, zoomContext);
 
             const newIndex = allDrawings.length - 1;
             onShapeCreated(newIndex);
         }
 
-        renderPreviousShapes(canvas, ctx, allDrawings, zoomContext);
+        //update the shapes in backend
     };
 
-    // const handleWheel = (e: WheelEvent) => {
-    //     if (getSelectedTool() !== "hand") return;
 
-    //     e.preventDefault();
-
-    //     const rect = canvas.getBoundingClientRect();
-    //     const mouseX = e.clientX - rect.left;
-    //     const mouseY = e.clientY - rect.top;
-
-    //     const currentZoom = zoomContext.getZoom();
-    //     const currentPan = zoomContext.getPanOffset();
-
-    //     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-    //     const newZoom = Math.max(0.1, Math.min(10, currentZoom * zoomFactor));
-
-    //     const scale = newZoom / currentZoom;
-    //     const newPanX = mouseX - (mouseX - currentPan.x) * scale;
-    //     const newPanY = mouseY - (mouseY - currentPan.y) * scale;
-
-    //     panZoomHandlers.onZoom(newZoom, { x: newPanX, y: newPanY });
-    // };
     const handleDoubleClick = (e: MouseEvent) => {
         const selectedTool = getSelectedTool();
         if (selectedTool !== "select") return;
@@ -551,6 +569,11 @@ export function addTextShape(shape: Shape) {
     allDrawings.push(shape);
 }
 
+export function addShape(shape: Shape) {
+    allDrawings.push(shape);
+
+}
+
 export function clearAllDrawings() {
     allDrawings = [];
 }
@@ -570,7 +593,7 @@ export function renderCanvas(
 
 
 // Export function to update a specific shape's property
-export function updateShapeProperty(shapeIndex: number, property: keyof Shape, value: any) {
+export function updateShapeProperty(shapeIndex: number, property: keyof Shape, value: any, send: (data: any) => void, roomId: number) {
     if (shapeIndex >= 0 && shapeIndex < allDrawings.length) {
         const shape = { ...allDrawings[shapeIndex] };
         if (property in shape) {

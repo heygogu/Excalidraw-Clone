@@ -1,13 +1,14 @@
 import { User, rooms } from "../state";
 import { prismaClient as prisma } from "@repo/db/client";
 
-
+import { ShapeType } from "@repo/db/client";
 interface Job {
     type: "chat" | "shape:create" | "shape:update";
     roomId: string;
     userId: string;
     payload: any;
 }
+
 
 const queue: Job[] = [];
 let processing = false;
@@ -33,19 +34,25 @@ async function processQueue() {
                     },
                 });
             } else if (job.type === "shape:create") {
+
                 await prisma.shape.create({
                     data: {
                         roomId: Number(job.roomId),
                         userId: job.userId,
-                        type: job.payload.type,
+                        type: ShapeType[job.payload.type as keyof typeof ShapeType],
                         strokeColor: job.payload.strokeColor ?? "black",
                         fillColor: job.payload.fillColor ?? "transparent",
                         strokeWidth: job.payload.strokeWidth ?? 1,
                         strokeStyle: job.payload.strokeStyle ?? "solid",
-                        fillStyle: job.payload.fillStyle ?? "none",
+                        fillStyle: job.payload.fillStyle ?? "solid",
                         points: job.payload.points ?? [],
                         text: job.payload.text ?? "",
                         fontSize: job.payload.fontSize ?? 12,
+                        startX: job.payload.startX ?? 0,
+                        startY: job.payload.startY ?? 0,
+                        width: job.payload.width ?? 0,
+                        height: job.payload.height ?? 0,
+
                     },
                 });
             }
@@ -85,13 +92,20 @@ async function processQueue() {
 export function handleEvent(user: User, data: any) {
     switch (data.type) {
         case "join-room": {
+
+            //add a new room with this id
+            //check if the room is not in the rooms map
+            if (!rooms.has(data.roomId)) {
+                rooms.set(data.roomId, new Set());
+            }
             const room = rooms.get(data.roomId);
+
             if (!room) {
                 console.log("room not found")
                 return;
             }
             room.add(user);
-            rooms.set(data.roomId, room);
+
 
             // notify other users
             room.forEach(u => {
@@ -136,7 +150,7 @@ export function handleEvent(user: User, data: any) {
                     shape: data.shape,
                     roomId: data.roomId,
                     userId: user.userId,
-                    username: user.name,
+                    username: user?.name,
                 })));
             }
             enqueue({ type: "shape:create", roomId: data.roomId, userId: user.userId, payload: data.shape });

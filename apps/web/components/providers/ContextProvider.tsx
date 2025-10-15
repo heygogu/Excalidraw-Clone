@@ -3,6 +3,7 @@ import { createContext, useState } from "react";
 import { useEffect, useContext } from "react";
 import { api } from "@/lib/axios";
 import { useFetchUser } from "@/hooks/useUserFetcher";
+import { parseCookies } from "nookies";
 
 interface User {
   name: string;
@@ -46,28 +47,25 @@ export function ContextProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function UserLoader({ children }: { children: React.ReactNode }) {
-  const { setUser } = useContext(Context);
+  const { user, setUser } = useContext(Context);
+  const cookies = parseCookies();
 
   const { data, isLoading } = useFetchUser();
-
-  // useEffect(() => {
-  //   const fetchUser = async () => {
-  //     try {
-  //       const res = await api.get("/me", { withCredentials: true });
-  //       setUser({ ...res.data.user });
-  //     } catch (err) {
-  //       setUser({ id: "", name: "", email: "", photo: "", token: "" });
-  //     }
-  //   };
-
-  //   fetchUser();
-  // }, []);
-
+  console.log(data, "dataaa");
   useEffect(() => {
     if (data) {
-      setUser(data);
+      //use user.token from cookies into setUser
+      setUser({
+        name: data.name,
+        email: data.email,
+        photo: data.photo,
+        token: cookies.token!,
+        id: data.id,
+      });
     }
   }, [data]);
+
+  console.log(user);
 
   return <>{children}</>;
 }

@@ -20,6 +20,7 @@
     "@repo/typescript-config": "workspace:*"
   },
   "dependencies": {
-    "@prisma/client": "^6.17.0"
+    "@prisma/client": "^6.17.0",
+    "@repo/backend-common": "workspace:*"
   }
 }

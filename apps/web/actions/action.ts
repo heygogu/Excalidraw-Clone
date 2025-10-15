@@ -35,11 +35,9 @@ const options = {
 export const login = async (payload: LoginPayload) => {
     try {
         const res = await api.post("/login", payload, options);
-        console.log("These are the resposne headers", res.headers);
         return res?.data
 
     } catch (err: any) {
-        console.log(err?.response?.data?.message)
         const message = err?.response?.data?.message || "Login failed";
         throw new Error(message)
     }
@@ -51,7 +49,6 @@ export const signup = async (payload: LoginPayload) => {
         return res?.data
 
     } catch (err: any) {
-        console.log(err?.response?.data?.message)
         const message = err?.response?.data?.message || "Signup failed";
         throw new Error(message)
     }
@@ -66,7 +63,6 @@ export const createRoom = async (payload: RoomPayload) => {
         return res?.data
 
     } catch (err: any) {
-        console.log(err?.response?.data?.message)
         const message = err?.response?.data?.message || "Room creation failed";
         throw new Error(message)
     }
@@ -78,7 +74,6 @@ export const deleteRoom = async (roomId: string) => {
         return res?.data
 
     } catch (err: any) {
-        console.log(err?.response?.data?.message)
         const message = err?.response?.data?.message || "Something went wrong";
         throw new Error(message)
     }
@@ -90,7 +85,17 @@ export const getRooms = async () => {
         return res?.data
 
     } catch (err: any) {
-        console.log(err?.response?.data?.message)
+        const message = err?.response?.data?.message || "Something went wrong";
+        throw new Error(message)
+    }
+};
+
+export const getAllShapesInRoom = async (roomId: number) => {
+    try {
+        const res = await api.get(`/shapes/${roomId}`, options);
+        return res?.data
+
+    } catch (err: any) {
         const message = err?.response?.data?.message || "Something went wrong";
         throw new Error(message)
     }
@@ -99,7 +104,6 @@ export const getRooms = async () => {
 export const getUser = async () => {
     try {
         const res = await api.get("/me", options)
-        console.log(res?.data, "data")
         return res.data?.user
     }
     catch (err: any) {

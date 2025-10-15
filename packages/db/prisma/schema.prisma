@@ -81,7 +81,7 @@ model Shape {
 
 
   type         ShapeType
-  points       String?
+  points       Json?
 
  
   strokeWidth  Int?

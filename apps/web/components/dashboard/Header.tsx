@@ -15,8 +15,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { User, Settings, LogOut } from "lucide-react";
 import Link from "next/link";
 import DarkMode from "../DarkMode";
+import { useContext } from "react";
+import { Context } from "../providers/ContextProvider";
 
 export function Header() {
+  const { user } = useContext(Context);
   return (
     <header className='sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60'>
       <div className='container mx-auto px-4 flex h-16 items-center justify-between max-w-7xl'>
@@ -49,7 +52,7 @@ export function Header() {
                 <Avatar className='h-10 w-10 ring-2 ring-primary/10 hover:ring-primary/30 transition-all'>
                   <AvatarImage src='' alt='User' />
                   <AvatarFallback className='bg-gradient-to-br from-primary to-purple-600 text-white'>
-                    JD
+                    {user.name.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
               </Button>
@@ -57,9 +60,11 @@ export function Header() {
             <DropdownMenuContent className='w-56' align='end' forceMount>
               <DropdownMenuLabel className='font-normal'>
                 <div className='flex flex-col space-y-1'>
-                  <p className='text-sm font-medium leading-none'>John Doe</p>
+                  <p className='text-sm font-medium leading-none'>
+                    {user.name}
+                  </p>
                   <p className='text-xs leading-none text-muted-foreground'>
-                    john@example.com
+                    {user.email}
                   </p>
                 </div>
               </DropdownMenuLabel>
