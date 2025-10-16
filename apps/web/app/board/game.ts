@@ -161,10 +161,6 @@ export async function initDrawing(
         allDrawings = res
         if (!ctx || !canvas) return;
         renderPreviousShapes(canvas, ctx, allDrawings, zoomContext);
-        // send({
-        //     type: "join-room",
-        //     roomId
-        // })
     }
 
     await getAllShapes();
@@ -178,6 +174,7 @@ export async function initDrawing(
     let panStart = { x: 0, y: 0 };
     let startX = 0;
     let startY = 0;
+    let currentlySelectedId: number | null = null;
 
 
 
@@ -296,6 +293,12 @@ export async function initDrawing(
             const shape = getShapeAtPosition(coords.x, coords.y);
             if (!shape) return
             if (shape.id !== null) {
+
+                if (currentlySelectedId !== shape.id) {
+                    currentlySelectedId = shape.id;
+                    renderPreviousShapes(canvas, ctx, allDrawings, zoomContext, shape.id);
+                }
+
                 draggedShapeId = Number(shape.id);
                 dragging = true;
                 dragStartPos = coords;
@@ -440,7 +443,6 @@ export async function initDrawing(
     const handleMouseUp = (e: MouseEvent) => {
         const selectedTool = getSelectedTool();
 
-        // End panning
         if (panning) {
             panning = false;
             canvas.style.cursor = "grab";
@@ -449,14 +451,14 @@ export async function initDrawing(
         }
 
         const coords = screenToCanvas(e.clientX, e.clientY);
-        // End dragging - DON'T clear draggedShapeIndex yet
+
         if (dragging) {
             dragging = false;
 
             const dx = coords.x - dragStartPos.x;
             const dy = coords.y - dragStartPos.y;
 
-            // use loose equality so string/number ids still match
+
             const shape = allDrawings.find(d => d.id == draggedShapeId);
             if (!shape) {
                 console.warn("drag end: shape not found", { draggedShapeId, coords, dragStartPos });
@@ -464,20 +466,19 @@ export async function initDrawing(
                 return;
             }
 
-            // Calculate new position from the start-of-drag position (not the possibly-mutated shape)
+
             const newX = shapeStartPos.x + dx;
             const newY = shapeStartPos.y + dy;
 
-            // small threshold to ignore micro-movements/jitter
-            const THRESHOLD = 0.5; // pixels
+
+            const THRESHOLD = 0.5;
             const moved = Math.abs(dx) > THRESHOLD || Math.abs(dy) > THRESHOLD;
 
             if (moved) {
-                // update local model
                 shape.startX = newX;
                 shape.startY = newY;
 
-                // ensure payload contains the minimal/expected fields (id + changed props)
+
                 send({
                     type: "shape:update",
                     roomId,
@@ -490,8 +491,7 @@ export async function initDrawing(
                     },
                 });
             } else {
-                // nothing changed enough to bother sending
-                // console.debug can help during dev to confirm skipped sends
+
                 console.debug("drag end: movement below threshold, not sending", { dx, dy });
             }
 
@@ -566,7 +566,7 @@ export async function initDrawing(
         const shape = getShapeAtPosition(coords.x, coords.y);
         if (!shape) return
 
-        if (shape.id !== null && shape!.type === "text") {
+        if (shape.id !== null) {
             onTextEdit(shape.id, shape);
         }
     };

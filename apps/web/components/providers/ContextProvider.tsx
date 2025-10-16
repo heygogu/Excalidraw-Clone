@@ -1,7 +1,6 @@
 "use client";
 import { createContext, useState } from "react";
 import { useEffect, useContext } from "react";
-import { api } from "@/lib/axios";
 import { useFetchUser } from "@/hooks/useUserFetcher";
 import { parseCookies } from "nookies";
 
@@ -50,11 +49,10 @@ export function UserLoader({ children }: { children: React.ReactNode }) {
   const { user, setUser } = useContext(Context);
   const cookies = parseCookies();
 
-  const { data, isLoading } = useFetchUser();
-  console.log(data, "dataaa");
+  const { data, invalidateRooms } = useFetchUser();
+
   useEffect(() => {
     if (data) {
-      //use user.token from cookies into setUser
       setUser({
         name: data.name,
         email: data.email,
@@ -62,10 +60,9 @@ export function UserLoader({ children }: { children: React.ReactNode }) {
         token: cookies.token!,
         id: data.id,
       });
+      invalidateRooms();
     }
   }, [data]);
-
-  console.log(user);
 
   return <>{children}</>;
 }

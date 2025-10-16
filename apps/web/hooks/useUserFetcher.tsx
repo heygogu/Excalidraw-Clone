@@ -1,11 +1,8 @@
-import { useContext, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getUser } from "@/actions/action";
-import { Context } from "@/components/providers/ContextProvider";
 import { parseCookies } from "nookies";
 
 export function useFetchUser() {
-  const { user, setUser } = useContext(Context);
   const queryClient = useQueryClient();
   const cookies = parseCookies();
   console.log(cookies);
@@ -19,9 +16,9 @@ export function useFetchUser() {
 
   // Sync React Query → Context
 
-  const invalidateUser = async () => {
+  const invalidateRooms = async () => {
     await queryClient.invalidateQueries({ queryKey: ["rooms"] });
   };
 
-  return { ...query, invalidateUser };
+  return { ...query, invalidateRooms };
 }

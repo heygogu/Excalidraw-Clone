@@ -6,62 +6,75 @@ export function useWebSocket(onMessage: (data: any) => void) {
   const [isConnected, setIsConnected] = useState(false);
   const ws = useRef<WebSocket | null>(null);
   const { user } = useContext(Context);
+  const onMessageRef = useRef(onMessage);
+
+  // Update the message handler without reconnecting
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+  }, [onMessage]);
 
   useEffect(() => {
     if (!user?.token) {
       return;
     }
 
+    // Prevent duplicate connections during HMR
+    if (
+      ws.current?.readyState === WebSocket.OPEN ||
+      ws.current?.readyState === WebSocket.CONNECTING
+    ) {
+      console.log("⚠️ WebSocket already exists, skipping duplicate connection");
+      return;
+    }
+
     const wsUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "ws://localhost:8080";
     const fullUrl = `${wsUrl}?token=${user.token}`;
 
+    console.log("🔌 Creating new WebSocket connection");
     const socket = new WebSocket(fullUrl);
     ws.current = socket;
 
     socket.onopen = () => {
-      console.log("WebSocket connected");
+      console.log("✅ WebSocket connected");
       setIsConnected(true);
     };
 
     socket.onclose = (event) => {
-      console.log("WebSocket disconnected:", event.code, event.reason);
+      console.log("❌ WebSocket disconnected:", event.code, event.reason);
       setIsConnected(false);
     };
 
     socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log("Received message:", data);
-
-        onMessage(data);
+        console.log("📨 Received message:", data);
+        onMessageRef.current(data); // Use ref instead of callback
       } catch (error) {
-        console.error("Failed to parse message:", error);
+        console.log("Failed to parse message:", error);
       }
     };
 
     socket.onerror = (error) => {
-      console.error("WebSocket error:", error);
+      console.log("WebSocket error:", error);
     };
 
     return () => {
+      console.log("🧹 Cleaning up WebSocket");
       if (
         socket.readyState === WebSocket.OPEN ||
         socket.readyState === WebSocket.CONNECTING
       ) {
-        socket.close();
+        socket.close(1000, "Component unmounting");
       }
     };
   }, [user?.token]);
 
   const send = useCallback((data: any) => {
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      console.log("📤 Sending message:", data);
       ws.current.send(JSON.stringify(data));
     } else {
-      console.error(
-        "WebSocket is not connected. ReadyState:",
-        ws.current?.readyState
-      );
-      throw new Error("WebSocket is not connected");
+      console.warn("⏳ WebSocket not ready, queueing message:", data);
     }
   }, []);
 

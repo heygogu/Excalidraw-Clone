@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   getToolTypeFromString,
   pastelColors,
@@ -32,6 +32,7 @@ import { useParams } from "next/navigation";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { Badge } from "@/components/ui/badge";
 import { useTheme } from "next-themes";
+import { Context } from "@/components/providers/ContextProvider";
 
 const Room = () => {
   const [selectedTool, setSelectedTool] = useState<ToolType>("select");
@@ -67,14 +68,13 @@ const Room = () => {
   const currentPropertiesRef = useRef(currentProperties);
   const selectedShapeIndexRef = useRef(selectedShapeId);
 
-  // const handleSocketMessage =
+  const { user } = useContext(Context);
+
   const { send, isConnected } = useWebSocket(
     useCallback((eventData: any) => {
       switch (eventData.type) {
         case "shape:create":
           allDrawings.push(eventData.shape);
-          // Re-render canvas
-          console.log("Data Received", eventData);
           const canvas = canvasRef.current;
           const ctx = canvas?.getContext("2d");
           if (canvas && ctx) {
@@ -84,9 +84,9 @@ const Room = () => {
             });
 
             // setSelectedShapeId(eventData.shape.id);
-            console.log("nyi shape id", eventData.shape.id);
+
             setSelectedTool("select");
-            setShowPropertyPanel(true);
+
             const shape = eventData.shape;
             if (shape) {
               setCurrentProperties({
@@ -102,7 +102,10 @@ const Room = () => {
 
         case "shape:update":
           const { shape } = eventData;
-          // updateShapeProperty(shapeIndex, property, value, send, Number(roomId));
+
+          if (eventData.userId === user?.id) {
+            return;
+          }
           const canvas2 = canvasRef.current;
           const ctx2 = canvas2?.getContext("2d");
           if (canvas2 && ctx2) {
@@ -113,8 +116,9 @@ const Room = () => {
 
             setSelectedShapeId(eventData.shape.id);
             setSelectedTool("select");
-            setShowPropertyPanel(true);
-            setEditingTextId(null);
+            if (eventData.shape.type === "text") {
+              setEditingTextId(null);
+            }
           }
           break;
 
@@ -124,7 +128,6 @@ const Room = () => {
     }, [])
   );
 
-  // Keep refs in sync
   useEffect(() => {
     zoomRef.current = zoom;
     panOffsetRef.current = panOffset;
@@ -132,16 +135,6 @@ const Room = () => {
     currentPropertiesRef.current = currentProperties;
     selectedShapeIndexRef.current = selectedShapeId;
   }, [zoom, panOffset, selectedTool, currentProperties, selectedShapeId]);
-
-  // const handleTextEdit = (index: number, shape: Shape) => {
-  //   setEditingTextId(index);
-  //   setTextPosition({
-  //     screen: { x: shape.startX, y: shape.startY },
-  //     canvas: { x: shape.startX, y: shape.startY },
-  //   });
-  //   setCurrentText(shape.text || "");
-  //   setIsEditingText(true);
-  // };
 
   const handleCanvasBgChange = (color: string, e: React.MouseEvent) => {
     e.preventDefault();
@@ -204,14 +197,12 @@ const Room = () => {
 
     const normalizedFontSize = 20 / zoom;
 
-    // Measure text dimensions properly
     ctx.save();
     ctx.font = `${normalizedFontSize}px Virgil, cursive`;
 
     const lines = text.split("\n");
     const lineHeight = normalizedFontSize * 1.4;
 
-    // Calculate actual width (max line width)
     let maxWidth = 0;
     lines.forEach((line) => {
       const metrics = ctx.measureText(line);
@@ -224,26 +215,6 @@ const Room = () => {
     ctx.restore();
 
     if (editingTextId !== null) {
-      // Update existing text
-      // updateShapeProperty(editingTextId, "text", text, send, Number(roomId));
-      // updateShapeProperty(
-      //   editingTextId,
-      //   "width",
-      //   textWidth,
-      //   send,
-      //   Number(roomId)
-      // );
-      // updateShapeProperty(
-      //   editingTextId,
-      //   "height",
-      //   textHeight,
-      //   send,
-      //   Number(roomId)
-      // );
-      // setSelectedShapeIndex(editingTextId);
-      // setShowPropertyPanel(true);
-
-      // setEditingTextId(null);
       const shape = getShape(editingTextId);
       //add new data for the shape add a property with three values
       send({
@@ -288,25 +259,9 @@ const Room = () => {
         send,
         Number(roomId)
       );
-
-      // // Force immediate re-render
-      // const canvas = canvasRef.current;
-      // const ctx = canvas?.getContext("2d");
-      // if (canvas && ctx) {
-      //   renderCanvas(
-      //     canvas,
-      //     ctx,
-      //     {
-      //       getZoom: () => zoomRef.current,
-      //       getPanOffset: () => panOffsetRef.current,
-      //     },
-      //     selectedShapeId
-      //   );
-      // }
     }
   };
 
-  // Re-render canvas whenever zoom or pan changes
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -329,10 +284,13 @@ const Room = () => {
     const canvas = canvasRef.current;
     if (!canvas || !roomId || !isConnected) return;
 
-    send({
-      type: "join-room",
-      roomId: Number(roomId),
-    });
+    const timer = setTimeout(() => {
+      console.log(" Joining room:", roomId);
+      send({
+        type: "join-room",
+        roomId: Number(roomId),
+      });
+    }, 100);
 
     let cleanup: (() => void) | undefined;
     let isSubscribed = true; // Prevent state updates after unmount
@@ -363,7 +321,6 @@ const Room = () => {
 
       resizeCanvas();
 
-      // ONLY handle text tool double-click here
       const handleTextDoubleClick = (e: MouseEvent) => {
         if (selectedToolRef.current !== "text") return;
 
@@ -461,10 +418,10 @@ const Room = () => {
 
             setTextPosition({
               screen: {
-                x: shape.startX * zoom + pan.x,
-                y: shape.startY * zoom + pan.y,
+                x: shape.startX + 250 * zoom + pan.x,
+                y: shape.startY + 50 * zoom + pan.y,
               },
-              canvas: { x: shape.startX, y: shape.startY },
+              canvas: { x: shape.startX + 250, y: shape.startY + 50 },
             });
             setCurrentText(shape.text || "");
             setIsEditingText(true);
@@ -509,16 +466,17 @@ const Room = () => {
     });
 
     return () => {
+      clearTimeout(timer);
       try {
         if (isConnected) {
+          console.log(" Leaving room:", roomId);
           send({
             type: "leave-room",
             roomId: Number(roomId),
           });
         }
       } catch (error) {
-        // WebSocket might already be closed, which is fine
-        console.log("Could not send leave-room (connection closed)");
+        console.log("Could not send leave-room:", error);
       }
 
       isSubscribed = false;

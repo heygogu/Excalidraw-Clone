@@ -396,7 +396,6 @@ export function repaintPencil(ctx: CanvasRenderingContext2D, shape: Shape) {
 
 export function repaintText(ctx: CanvasRenderingContext2D, shape: Shape) {
     if (!shape.text) return;
-    console.log("repainting text")
     ctx.save();
     ctx.fillStyle = shape.strokeColor || "#000000";
 
