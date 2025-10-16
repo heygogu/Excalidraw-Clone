@@ -7,7 +7,7 @@ export let allDrawings: Shape[] = [];
 let currentPoints: { x: number; y: number }[] = [];
 
 
-function drawSelectionBox(ctx: CanvasRenderingContext2D, shape: Shape) {
+export function drawSelectionBox(ctx: CanvasRenderingContext2D, shape: Shape) {
     ctx.save();
 
     const transform = ctx.getTransform();
@@ -85,7 +85,7 @@ function renderPreviousShapes(
     ctx: CanvasRenderingContext2D,
     allDrawings: Shape[],
     zoomContext: ZoomContext,
-    selectedIndex: number | null = null
+    selectedId: number | null = null
 ) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -125,7 +125,7 @@ function renderPreviousShapes(
                 break;
         }
 
-        if (index === selectedIndex) {
+        if (shape.id === selectedId) {
             drawSelectionBox(ctx, shape);
         }
     });
@@ -142,8 +142,8 @@ export async function initDrawing(
     getSelectedTool: () => ToolType,  // Changed to function
     getCurrentProperties: () => Partial<Shape>,  // Changed to function
     zoomContext: ZoomContext,
-    onShapeCreated: (index: number) => void,
-    onShapeSelected: (index: number | null) => void,
+    // onShapeCreated: (id: number) => void,
+    onShapeSelected: (id: number | null) => void,
     onTextEdit: (index: number, shape: Shape) => void,
     panZoomHandlers: {
         onPanStart: (isPanning: boolean) => void;
@@ -155,29 +155,24 @@ export async function initDrawing(
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    //get all shapes in the room
     async function getAllShapes() {
         const res = await getAllShapesInRoom(roomId);
 
-        console.log("first", res)
         allDrawings = res
-        console.log("allDrawings", allDrawings)
         if (!ctx || !canvas) return;
         renderPreviousShapes(canvas, ctx, allDrawings, zoomContext);
-        send({
-            type: "join-room",
-            roomId
-        })
+        // send({
+        //     type: "join-room",
+        //     roomId
+        // })
     }
 
     await getAllShapes();
 
-    //get all shapes in the room 
-
     let drawing = false;
     let dragging = false;
     let panning = false;
-    let draggedShapeIndex: number | null = null;
+    let draggedShapeId: number | null = null;
     let dragStartPos = { x: 0, y: 0 };
     let shapeStartPos = { x: 0, y: 0 };
     let panStart = { x: 0, y: 0 };
@@ -199,8 +194,7 @@ export async function initDrawing(
     };
 
 
-    // In game.ts - replace getShapeAtPosition
-    const getShapeAtPosition = (x: number, y: number): number | null => {
+    const getShapeAtPosition = (x: number, y: number): Shape | null => {
         for (let i = allDrawings.length - 1; i >= 0; i--) {
             const shape = allDrawings[i];
             if (!shape) return null;
@@ -239,7 +233,7 @@ export async function initDrawing(
                 const distance = Math.sqrt(dx * dx + dy * dy);
 
                 if (distance < tolerance) {
-                    return i;
+                    return shape;
                 }
             } // For text - check text bounds with actual stored dimensions
             else if (shape.type === 'text' && shape.text) {
@@ -253,7 +247,7 @@ export async function initDrawing(
                     y >= shape.startY &&
                     y <= shape.startY + textHeight
                 ) {
-                    return i;
+                    return shape;
                 }
             } else if (shape.type === 'pencil') {
                 // if (
@@ -271,7 +265,7 @@ export async function initDrawing(
                 const maxY = Math.max(shape.startY, shape.startY + shape.height);
 
                 if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
-                    return i;
+                    return shape;
                 }
             }
         }
@@ -299,17 +293,18 @@ export async function initDrawing(
 
         // Select mode
         if (selectedTool === "select") {
-            const shapeIndex = getShapeAtPosition(coords.x, coords.y);
-
-            if (shapeIndex !== null) {
-                draggedShapeIndex = shapeIndex;
+            const shape = getShapeAtPosition(coords.x, coords.y);
+            if (!shape) return
+            if (shape.id !== null) {
+                draggedShapeId = Number(shape.id);
                 dragging = true;
                 dragStartPos = coords;
                 shapeStartPos = {
-                    x: allDrawings[shapeIndex]!.startX,
-                    y: allDrawings[shapeIndex]!.startY,
+                    x: shape!.startX,
+                    y: shape!.startY,
                 };
-                onShapeSelected(shapeIndex);
+                onShapeSelected(Number(shape.id));
+
             } else {
                 // Clicking empty space - deselect
                 onShapeSelected(null);
@@ -343,15 +338,17 @@ export async function initDrawing(
 
 
         // Dragging selected shape
-        if (dragging && draggedShapeIndex !== null && getSelectedTool() === "select") {
+        if (dragging && draggedShapeId !== null && getSelectedTool() === "select") {
             const dx = coords.x - dragStartPos.x;
             const dy = coords.y - dragStartPos.y;
 
-            allDrawings[draggedShapeIndex]!.startX = shapeStartPos.x + dx;
-            allDrawings[draggedShapeIndex]!.startY = shapeStartPos.y + dy;
+            const shape = allDrawings.find(d => d.id == draggedShapeId)
+
+            shape!.startX = shapeStartPos.x + dx;
+            shape!.startY = shapeStartPos.y + dy;
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            renderPreviousShapes(canvas, ctx, allDrawings, zoomContext, draggedShapeIndex);
+            renderPreviousShapes(canvas, ctx, allDrawings, zoomContext, draggedShapeId);
             return;
         }
 
@@ -408,7 +405,7 @@ export async function initDrawing(
 
 
         const currentShape = {
-            id: uuidv4(),
+            id: -1,
             startX,
             startY,
             width,
@@ -451,19 +448,61 @@ export async function initDrawing(
             return;
         }
 
+        const coords = screenToCanvas(e.clientX, e.clientY);
         // End dragging - DON'T clear draggedShapeIndex yet
         if (dragging) {
             dragging = false;
-            // Keep the shape selected - don't set draggedShapeIndex to null here
-            renderPreviousShapes(canvas, ctx, allDrawings, zoomContext, draggedShapeIndex);
-            draggedShapeIndex = null; // Clear after rendering
+
+            const dx = coords.x - dragStartPos.x;
+            const dy = coords.y - dragStartPos.y;
+
+            // use loose equality so string/number ids still match
+            const shape = allDrawings.find(d => d.id == draggedShapeId);
+            if (!shape) {
+                console.warn("drag end: shape not found", { draggedShapeId, coords, dragStartPos });
+                draggedShapeId = null;
+                return;
+            }
+
+            // Calculate new position from the start-of-drag position (not the possibly-mutated shape)
+            const newX = shapeStartPos.x + dx;
+            const newY = shapeStartPos.y + dy;
+
+            // small threshold to ignore micro-movements/jitter
+            const THRESHOLD = 0.5; // pixels
+            const moved = Math.abs(dx) > THRESHOLD || Math.abs(dy) > THRESHOLD;
+
+            if (moved) {
+                // update local model
+                shape.startX = newX;
+                shape.startY = newY;
+
+                // ensure payload contains the minimal/expected fields (id + changed props)
+                send({
+                    type: "shape:update",
+                    roomId,
+                    shape: {
+                        ...shape,
+                        id: shape.id,
+                        startX: newX,
+                        startY: newY,
+
+                    },
+                });
+            } else {
+                // nothing changed enough to bother sending
+                // console.debug can help during dev to confirm skipped sends
+                console.debug("drag end: movement below threshold, not sending", { dx, dy });
+            }
+
+            draggedShapeId = null;
             return;
         }
+
 
         if (!drawing || selectedTool === "hand" || selectedTool === "select") return;
 
         drawing = false;
-        const coords = screenToCanvas(e.clientX, e.clientY);
 
         // if (selectedTool === "pencil") {
         //     if (currentPoints.length > 1) {
@@ -497,15 +536,7 @@ export async function initDrawing(
         const height = coords.y - startY;
 
         if (Math.abs(width) > 1 || Math.abs(height) > 1) {
-            const currentProperties = getCurrentProperties();
-            // allDrawings.push({
-            //     startX,
-            //     startY,
-            //     width,
-            //     height,
-            //     type: getToolTypeFromString(selectedTool),
-            //     ...currentProperties,
-            // });
+
             send({
                 type: "shape:create",
                 roomId,
@@ -519,13 +550,8 @@ export async function initDrawing(
                 }
             })
 
-            // renderPreviousShapes(canvas, ctx, allDrawings, zoomContext);
-
-            const newIndex = allDrawings.length - 1;
-            onShapeCreated(newIndex);
         }
 
-        //update the shapes in backend
     };
 
 
@@ -537,10 +563,11 @@ export async function initDrawing(
         e.stopPropagation();
 
         const coords = screenToCanvas(e.clientX, e.clientY);
-        const shapeIndex = getShapeAtPosition(coords.x, coords.y);
+        const shape = getShapeAtPosition(coords.x, coords.y);
+        if (!shape) return
 
-        if (shapeIndex !== null && allDrawings[shapeIndex]!.type === "text") {
-            onTextEdit(shapeIndex, allDrawings[shapeIndex]!);
+        if (shape.id !== null && shape!.type === "text") {
+            onTextEdit(shape.id, shape);
         }
     };
 
@@ -558,9 +585,20 @@ export async function initDrawing(
     };
 }
 
-export function getShape(shapeIndex: number): Shape | null {
-    if (shapeIndex >= 0 && shapeIndex < allDrawings.length) {
-        return allDrawings[shapeIndex]!;
+export function getShape(shapeId: number): Shape | null {
+    if (shapeId >= 0) {
+        const shape = allDrawings.find(d => Number(d.id) === shapeId);
+        if (!shape) return null;
+        return shape;
+    }
+    return null;
+}
+
+export function getShapeByIndex(shapeIndex: number): Shape | null {
+    if (shapeIndex >= 0) {
+        const shape = allDrawings[shapeIndex];
+        if (!shape) return null;
+        return shape;
     }
     return null;
 }
@@ -593,13 +631,35 @@ export function renderCanvas(
 
 
 // Export function to update a specific shape's property
-export function updateShapeProperty(shapeIndex: number, property: keyof Shape, value: any, send: (data: any) => void, roomId: number) {
-    if (shapeIndex >= 0 && shapeIndex < allDrawings.length) {
-        const shape = { ...allDrawings[shapeIndex] };
+export function updateShapeProperty(shapeId: number, property: keyof Shape, value: any, send: (data: any) => void, roomId: number) {
+    if (shapeId >= 0) {
+        const shape = allDrawings.find(d => d.id === shapeId);
+        if (!shape) return;
         if (property in shape) {
-            // Assuming that 'Shape' defines all optional properties as non-optional
-            shape[property] = value;
-            allDrawings[shapeIndex] = shape as Shape; // Cast the updated shape back to Shape type
+
+            send({
+                type: "shape:update",
+                roomId,
+                shape: {
+                    ...shape,
+                    [property]: value,
+                },
+            });
         }
     }
+}
+
+export function updateShapeById(shape: Shape, canvas: HTMLCanvasElement,
+    ctx: CanvasRenderingContext2D,
+    zoomContext: ZoomContext,) {
+    const shapeId = shape.id;
+
+    const shapeIndex = allDrawings.findIndex(s => s.id === shapeId);
+    if (shapeIndex >= 0) {
+        allDrawings.splice(shapeIndex, 1, shape);
+
+        renderCanvas(canvas, ctx, zoomContext);
+    }
+
+
 }

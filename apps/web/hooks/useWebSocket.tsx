@@ -51,7 +51,7 @@ export function useWebSocket(onMessage: (data: any) => void) {
         socket.close();
       }
     };
-  }, [user?.token]); // Add dependencies
+  }, [user?.token]);
 
   const send = useCallback((data: any) => {
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {

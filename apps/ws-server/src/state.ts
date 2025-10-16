@@ -17,13 +17,34 @@ export function removeUser(userId: string) {
     const user = users.get(userId);
     if (!user) return;
 
-    // remove user from all rooms
+    // Remove user from all rooms and notify others
     for (const [roomId, room] of rooms.entries()) {
-        room.delete(user);
-        if (room.size === 0) rooms.delete(roomId);
+        if (room.has(user)) {
+            room.delete(user);
+
+            // Notify remaining users in this room
+            room.forEach(u => {
+                if (u.ws.readyState === WebSocket.OPEN) {
+                    u.ws.send(JSON.stringify({
+                        type: "user_left",
+                        userId: user.userId,
+                        username: user.name,
+                        roomId: roomId
+                    }));
+                }
+            });
+
+            console.log(`User ${user.name} removed from room ${roomId}. Room size: ${room.size}`);
+        }
+
+        if (room.size === 0) {
+            rooms.delete(roomId);
+            console.log(`Room ${roomId} deleted (empty)`);
+        }
     }
 
     users.delete(userId);
+    console.log(`User ${user.name} (${userId}) completely removed`);
 }
 
 export function joinRoom(roomId: string, user: User) {

@@ -2,31 +2,33 @@ import { User, rooms } from "../state";
 import { prismaClient as prisma } from "@repo/db/client";
 
 import { ShapeType } from "@repo/db/client";
-interface Job {
-    type: "chat" | "shape:create" | "shape:update";
-    roomId: string;
-    userId: string;
-    payload: any;
-}
+import { Job } from "../utils/auth";
 
 
-const queue: Job[] = [];
+
+const queue: { job: Job; resolve: (v: any) => void; reject: (e: any) => void }[] = [];
 let processing = false;
 
-export function enqueue(job: Job) {
-    queue.push(job);
-    processQueue();
+// --- Enqueue with Promise ---
+export function enqueue(job: Job): Promise<any> {
+    return new Promise((resolve, reject) => {
+        queue.push({ job, resolve, reject });
+        processQueue();
+    });
 }
 
+// --- Process Queue ---
 async function processQueue() {
     if (processing) return;
     processing = true;
 
     while (queue.length > 0) {
-        const job = queue.shift()!;
+        const { job, resolve, reject } = queue.shift()!;
         try {
+            let result;
+
             if (job.type === "chat") {
-                await prisma.chat.create({
+                result = await prisma.chat.create({
                     data: {
                         roomId: Number(job.roomId),
                         userId: job.userId,
@@ -34,8 +36,7 @@ async function processQueue() {
                     },
                 });
             } else if (job.type === "shape:create") {
-
-                await prisma.shape.create({
+                result = await prisma.shape.create({
                     data: {
                         roomId: Number(job.roomId),
                         userId: job.userId,
@@ -52,21 +53,19 @@ async function processQueue() {
                         startY: job.payload.startY ?? 0,
                         width: job.payload.width ?? 0,
                         height: job.payload.height ?? 0,
-
                     },
                 });
-            }
-            else if (job.type === "shape:update") {
-                await prisma.shape.update({
-                    where: {
-                        id: job.payload.id,
-                    },
+            } else if (job.type === "shape:update") {
+                result = await prisma.shape.update({
+                    where: { roomId: Number(job.roomId), id: job.payload.id },
                     data: {
                         startX: job.payload.startX,
                         startY: job.payload.startY,
                         width: job.payload.width,
                         height: job.payload.height,
-                        type: job.payload.type,
+                        type: job.payload.type
+                            ? ShapeType[job.payload.type as keyof typeof ShapeType]
+                            : undefined,
                         strokeColor: job.payload.strokeColor,
                         fillColor: job.payload.fillColor,
                         strokeWidth: job.payload.strokeWidth,
@@ -78,10 +77,12 @@ async function processQueue() {
                     },
                 });
             }
+
+            resolve(result); // ✅ return DB result (contains id, etc.)
         } catch (err) {
             console.error("DB write failed, retrying:", err);
-            queue.push(job); // retry
-            await new Promise(r => setTimeout(r, 1000)); // backoff
+            queue.push({ job, resolve, reject }); // requeue
+            await new Promise((r) => setTimeout(r, 1000)); // backoff
         }
     }
 
@@ -89,7 +90,7 @@ async function processQueue() {
 }
 
 
-export function handleEvent(user: User, data: any) {
+export async function handleEvent(user: User, data: any) {
     switch (data.type) {
         case "join-room": {
 
@@ -116,10 +117,26 @@ export function handleEvent(user: User, data: any) {
 
         case "leave-room": {
             const room = rooms.get(data.roomId);
-            if (room) {
+            if (room && room.has(user)) {
                 room.delete(user);
-                if (room.size === 0) rooms.delete(data.roomId);
-                user.ws.send(JSON.stringify({ type: "user_left_room", userId: user?.name }));
+
+                // Notify remaining users
+                room.forEach(u => {
+                    if (u.ws.readyState === WebSocket.OPEN) {
+                        u.ws.send(JSON.stringify({
+                            type: "user_left",
+                            userId: user.userId,
+                            username: user.name,
+                            roomId: data.roomId
+                        }));
+                    }
+                });
+
+                if (room.size === 0) {
+                    rooms.delete(data.roomId);
+                }
+
+                console.log(`User ${user.name} left room ${data.roomId} gracefully`);
             }
             break;
         }
@@ -144,32 +161,43 @@ export function handleEvent(user: User, data: any) {
 
         case "shape:create": {
             const room = rooms.get(data.roomId);
+            const createdShape = await enqueue({ type: "shape:create", roomId: data.roomId, userId: user.userId, payload: data.shape });
             if (room) {
-                room.forEach(u => u.ws.send(JSON.stringify({
-                    type: "shape:create",
-                    shape: data.shape,
-                    roomId: data.roomId,
-                    userId: user.userId,
-                    username: user?.name,
-                })));
+                room.forEach(u => {
+
+                    if (u.ws.readyState === WebSocket.OPEN) {
+                        u.ws.send(JSON.stringify({
+                            type: "shape:create",
+                            shape: {
+                                ...data.shape,
+                                id: createdShape.id
+                            },
+                            roomId: data.roomId,
+                            userId: user.userId,
+                            username: user.name,
+                        }));
+                    }
+                });
             }
-            enqueue({ type: "shape:create", roomId: data.roomId, userId: user.userId, payload: data.shape });
             break;
         }
 
         case "shape:update": {
             const room = rooms.get(data.roomId);
+
+            const updatedShape = await enqueue({ type: "shape:update", roomId: data.roomId, userId: user.userId, payload: data.shape });
             if (room) {
                 room.forEach(u => u.ws.send(JSON.stringify({
                     type: "shape:update",
-                    shape: data.shape,
+                    shape: {
+                        ...data.shape,
+                        id: updatedShape.id
+                    },
                     roomId: data.roomId,
                     userId: user.userId,
                     username: user.name,
                 })));
             }
-
-            enqueue({ type: "shape:update", roomId: data.roomId, userId: user.userId, payload: data.shape });
             break;
         }
 

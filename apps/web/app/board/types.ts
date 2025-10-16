@@ -26,7 +26,7 @@ import {
 import { ShapeType } from "@repo/db/client";
 
 export interface Shape {
-    id: string,
+    id: number,
     startX: number;
     startY: number;
     width: number;

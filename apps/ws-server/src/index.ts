@@ -32,6 +32,10 @@ wss.on("connection", (ws, req) => {
     });
 
     ws.on("close", () => removeUser(user.userId));
+
+    ws.on("error", (error) => {
+        console.error(`WebSocket error for user ${user.name}:`, error);
+    });
 });
 
 console.log("WS server running on ws://localhost:8080");

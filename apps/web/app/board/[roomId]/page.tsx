@@ -1,5 +1,5 @@
 "use client";
-import { use, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getToolTypeFromString,
   pastelColors,
@@ -8,12 +8,12 @@ import {
   ToolType,
 } from "../types";
 import {
-  addTextShape,
   allDrawings,
-  getAllDrawings,
+  drawSelectionBox,
   getShape,
   initDrawing,
   renderCanvas,
+  updateShapeById,
   updateShapeProperty,
 } from "../game";
 import PropertyPanel from "@/components/Propertypanel";
@@ -30,10 +30,10 @@ import { Menu, Minus, Plus, Trash } from "lucide-react";
 import { CanvasDropdown } from "@/components/CanvasDropdown";
 import { useParams } from "next/navigation";
 import { useWebSocket } from "@/hooks/useWebSocket";
-import { ShapeType } from "@repo/db/client";
-import { get } from "http";
+import { Badge } from "@/components/ui/badge";
+import { useTheme } from "next-themes";
 
-const Room = ({ params }: { params: { id: string } }) => {
+const Room = () => {
   const [selectedTool, setSelectedTool] = useState<ToolType>("select");
   const [zoom, setZoom] = useState(1);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
@@ -41,11 +41,9 @@ const Room = ({ params }: { params: { id: string } }) => {
   const [canvasBg, setCanvasBg] = useState("#f5f5f5");
   const [isEditingText, setIsEditingText] = useState(false);
   const [currentText, setCurrentText] = useState("");
-  const [selectedShapeIndex, setSelectedShapeIndex] = useState<number | null>(
-    null
-  );
+  const [selectedShapeId, setSelectedShapeId] = useState<number | null>(null);
   const { roomId } = useParams();
-  console.log(roomId);
+  // console.log(roomId);
 
   const [showPropertyPanel, setShowPropertyPanel] = useState(false);
   const [currentProperties, setCurrentProperties] = useState<Partial<Shape>>({
@@ -59,49 +57,72 @@ const Room = ({ params }: { params: { id: string } }) => {
     screen: { x: number; y: number };
     canvas: { x: number; y: number };
   }>({ screen: { x: 0, y: 0 }, canvas: { x: 0, y: 0 } });
-  const [editingTextIndex, setEditingTextIndex] = useState<number | null>(null);
-
+  const [editingTextId, setEditingTextId] = useState<number | null>(null);
+  const { theme } = useTheme();
   const textInputRef = useRef<HTMLTextAreaElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const zoomRef = useRef(zoom);
   const panOffsetRef = useRef(panOffset);
   const selectedToolRef = useRef(selectedTool);
   const currentPropertiesRef = useRef(currentProperties);
-  const selectedShapeIndexRef = useRef(selectedShapeIndex);
+  const selectedShapeIndexRef = useRef(selectedShapeId);
 
-  const { send, isConnected } = useWebSocket((eventData) => {
-    switch (eventData.type) {
-      case "shape:create":
-        allDrawings.push(eventData.shape);
-        // Re-render canvas
-        console.log("Data Received", eventData);
-        const canvas = canvasRef.current;
-        const ctx = canvas?.getContext("2d");
-        if (canvas && ctx) {
-          renderCanvas(canvas, ctx, {
-            getZoom: () => zoomRef.current,
-            getPanOffset: () => panOffsetRef.current,
-          });
-        }
-        break;
+  // const handleSocketMessage =
+  const { send, isConnected } = useWebSocket(
+    useCallback((eventData: any) => {
+      switch (eventData.type) {
+        case "shape:create":
+          allDrawings.push(eventData.shape);
+          // Re-render canvas
+          console.log("Data Received", eventData);
+          const canvas = canvasRef.current;
+          const ctx = canvas?.getContext("2d");
+          if (canvas && ctx) {
+            renderCanvas(canvas, ctx, {
+              getZoom: () => zoomRef.current,
+              getPanOffset: () => panOffsetRef.current,
+            });
 
-      case "shape:update":
-        const { shapeIndex, property, value } = eventData;
-        updateShapeProperty(shapeIndex, property, value, send, Number(roomId));
-        const canvas2 = canvasRef.current;
-        const ctx2 = canvas2?.getContext("2d");
-        if (canvas2 && ctx2) {
-          renderCanvas(canvas2, ctx2, {
-            getZoom: () => zoomRef.current,
-            getPanOffset: () => panOffsetRef.current,
-          });
-        }
-        break;
+            // setSelectedShapeId(eventData.shape.id);
+            console.log("nyi shape id", eventData.shape.id);
+            setSelectedTool("select");
+            setShowPropertyPanel(true);
+            const shape = eventData.shape;
+            if (shape) {
+              setCurrentProperties({
+                strokeColor: shape.strokeColor || "#000000",
+                fillColor: shape.fillColor || "transparent",
+                strokeWidth: shape.strokeWidth || 2,
+                strokeStyle: shape.strokeStyle || "solid",
+                fillStyle: shape.fillStyle || "solid",
+              });
+            }
+          }
+          break;
 
-      default:
-        break;
-    }
-  });
+        case "shape:update":
+          const { shape } = eventData;
+          // updateShapeProperty(shapeIndex, property, value, send, Number(roomId));
+          const canvas2 = canvasRef.current;
+          const ctx2 = canvas2?.getContext("2d");
+          if (canvas2 && ctx2) {
+            updateShapeById(shape, canvas2, ctx2, {
+              getZoom: () => zoomRef.current,
+              getPanOffset: () => panOffsetRef.current,
+            });
+
+            setSelectedShapeId(eventData.shape.id);
+            setSelectedTool("select");
+            setShowPropertyPanel(true);
+            setEditingTextId(null);
+          }
+          break;
+
+        default:
+          break;
+      }
+    }, [])
+  );
 
   // Keep refs in sync
   useEffect(() => {
@@ -109,11 +130,11 @@ const Room = ({ params }: { params: { id: string } }) => {
     panOffsetRef.current = panOffset;
     selectedToolRef.current = selectedTool;
     currentPropertiesRef.current = currentProperties;
-    selectedShapeIndexRef.current = selectedShapeIndex;
-  }, [zoom, panOffset, selectedTool, currentProperties, selectedShapeIndex]);
+    selectedShapeIndexRef.current = selectedShapeId;
+  }, [zoom, panOffset, selectedTool, currentProperties, selectedShapeId]);
 
   // const handleTextEdit = (index: number, shape: Shape) => {
-  //   setEditingTextIndex(index);
+  //   setEditingTextId(index);
   //   setTextPosition({
   //     screen: { x: shape.startX, y: shape.startY },
   //     canvas: { x: shape.startX, y: shape.startY },
@@ -202,39 +223,41 @@ const Room = ({ params }: { params: { id: string } }) => {
 
     ctx.restore();
 
-    if (editingTextIndex !== null) {
+    if (editingTextId !== null) {
       // Update existing text
-      updateShapeProperty(editingTextIndex, "text", text, send, Number(roomId));
-      updateShapeProperty(
-        editingTextIndex,
-        "width",
-        textWidth,
-        send,
-        Number(roomId)
-      );
-      updateShapeProperty(
-        editingTextIndex,
-        "height",
-        textHeight,
-        send,
-        Number(roomId)
-      );
-      setSelectedShapeIndex(editingTextIndex);
-      setShowPropertyPanel(true);
+      // updateShapeProperty(editingTextId, "text", text, send, Number(roomId));
+      // updateShapeProperty(
+      //   editingTextId,
+      //   "width",
+      //   textWidth,
+      //   send,
+      //   Number(roomId)
+      // );
+      // updateShapeProperty(
+      //   editingTextId,
+      //   "height",
+      //   textHeight,
+      //   send,
+      //   Number(roomId)
+      // );
+      // setSelectedShapeIndex(editingTextId);
+      // setShowPropertyPanel(true);
 
-      setEditingTextIndex(null);
+      // setEditingTextId(null);
+      const shape = getShape(editingTextId);
+      //add new data for the shape add a property with three values
+      send({
+        type: "shape:update",
+        roomId: Number(roomId),
+        shape: {
+          ...shape,
+          text: text,
+          width: textWidth,
+          height: textHeight,
+          fontSize: Math.round(normalizedFontSize),
+        },
+      });
     } else {
-      // Add new text
-      // addTextShape({
-      //   startX: x,
-      //   startY: y,
-      //   width: textWidth,
-      //   height: textHeight,
-      //   type: "text",
-      //   strokeColor: currentProperties.strokeColor || "#000000",
-      //   text: text,
-      //   fontSize: normalizedFontSize,
-      // });
       send({
         type: "shape:create",
         roomId: Number(roomId),
@@ -249,56 +272,37 @@ const Room = ({ params }: { params: { id: string } }) => {
           fontSize: Math.round(normalizedFontSize),
         },
       });
-
-      const newIndex = getAllDrawings().length - 1;
-
-      // Auto-select the new text and switch to select tool
-      setSelectedShapeIndex(newIndex);
-      setSelectedTool("select");
-      setShowPropertyPanel(true);
     }
-
-    // if (canvas && ctx) {
-    //   renderCanvas(
-    //     canvas,
-    //     ctx,
-    //     {
-    //       getZoom: () => zoomRef.current,
-    //       getPanOffset: () => panOffsetRef.current,
-    //     },
-    //     selectedShapeIndex
-    //   );
-    // }
 
     setCurrentText("");
   };
 
   const handlePropertyChange = (property: string, value: any) => {
     setCurrentProperties((prev) => ({ ...prev, [property]: value }));
-
-    if (selectedShapeIndex !== null) {
+    console.log(selectedShapeId, "id");
+    if (selectedShapeId !== null) {
       updateShapeProperty(
-        selectedShapeIndex,
+        selectedShapeId,
         property as keyof Shape,
         value,
         send,
         Number(roomId)
       );
 
-      // Force immediate re-render
-      const canvas = canvasRef.current;
-      const ctx = canvas?.getContext("2d");
-      if (canvas && ctx) {
-        renderCanvas(
-          canvas,
-          ctx,
-          {
-            getZoom: () => zoomRef.current,
-            getPanOffset: () => panOffsetRef.current,
-          },
-          selectedShapeIndex
-        );
-      }
+      // // Force immediate re-render
+      // const canvas = canvasRef.current;
+      // const ctx = canvas?.getContext("2d");
+      // if (canvas && ctx) {
+      //   renderCanvas(
+      //     canvas,
+      //     ctx,
+      //     {
+      //       getZoom: () => zoomRef.current,
+      //       getPanOffset: () => panOffsetRef.current,
+      //     },
+      //     selectedShapeId
+      //   );
+      // }
     }
   };
 
@@ -325,10 +329,16 @@ const Room = ({ params }: { params: { id: string } }) => {
     const canvas = canvasRef.current;
     if (!canvas || !roomId || !isConnected) return;
 
+    send({
+      type: "join-room",
+      roomId: Number(roomId),
+    });
+
     let cleanup: (() => void) | undefined;
     let isSubscribed = true; // Prevent state updates after unmount
 
-    // Async initialization function
+    const ctx = canvas.getContext("2d");
+
     async function initializeCanvas() {
       if (!roomId) return;
       if (!canvas) return;
@@ -388,31 +398,31 @@ const Room = ({ params }: { params: { id: string } }) => {
             getZoom: () => zoomRef.current,
             getPanOffset: () => panOffsetRef.current,
           },
-          (shapeIndex: number) => {
-            if (!isSubscribed) return; // Prevent state updates after unmount
+          // (shapeId: number) => {
+          //   if (!isSubscribed) return; // Prevent state updates after unmount
 
-            setSelectedShapeIndex(shapeIndex);
-            setSelectedTool("select");
-            setShowPropertyPanel(true);
+          //   setSelectedShapeId(shapeId);
+          //   setSelectedTool("select");
+          //   setShowPropertyPanel(true);
 
-            const shape = getShape(shapeIndex);
-            if (shape) {
-              setCurrentProperties({
-                strokeColor: shape.strokeColor || "#000000",
-                fillColor: shape.fillColor || "transparent",
-                strokeWidth: shape.strokeWidth || 2,
-                strokeStyle: shape.strokeStyle || "solid",
-                fillStyle: shape.fillStyle || "solid",
-              });
-            }
-          },
-          (shapeIndex) => {
+          //   const shape = getShape(shapeId);
+          //   if (shape) {
+          //     setCurrentProperties({
+          //       strokeColor: shape.strokeColor || "#000000",
+          //       fillColor: shape.fillColor || "transparent",
+          //       strokeWidth: shape.strokeWidth || 2,
+          //       strokeStyle: shape.strokeStyle || "solid",
+          //       fillStyle: shape.fillStyle || "solid",
+          //     });
+          //   }
+          // },
+          (shapeId) => {
             if (!isSubscribed) return;
 
-            setSelectedShapeIndex(shapeIndex);
-
-            if (shapeIndex !== null) {
-              const shape = getShape(shapeIndex);
+            setSelectedShapeId(shapeId);
+            console.log("shapeId", shapeId);
+            if (shapeId !== null) {
+              const shape = getShape(shapeId);
               if (shape) {
                 setCurrentProperties({
                   strokeColor: shape.strokeColor || "#000000",
@@ -422,28 +432,30 @@ const Room = ({ params }: { params: { id: string } }) => {
                   fillStyle: shape.fillStyle || "solid",
                 });
               }
+              if (canvas && ctx && shape) {
+                drawSelectionBox(ctx, shape);
+              }
               setShowPropertyPanel(true);
             } else {
               setShowPropertyPanel(false);
             }
 
-            const ctx = canvas?.getContext("2d");
-            if (canvas && ctx) {
-              renderCanvas(
-                canvas,
-                ctx,
-                {
-                  getZoom: () => zoomRef.current,
-                  getPanOffset: () => panOffsetRef.current,
-                },
-                shapeIndex
-              );
-            }
+            // if (canvas && ctx) {
+            //   renderCanvas(
+            //     canvas,
+            //     ctx,
+            //     {
+            //       getZoom: () => zoomRef.current,
+            //       getPanOffset: () => panOffsetRef.current,
+            //     },
+            //     shapeId
+            //   );
+            // }
           },
-          (index, shape) => {
+          (shapeId, shape) => {
             if (!isSubscribed) return;
 
-            setEditingTextIndex(index);
+            setEditingTextId(Number(shape.id));
             const zoom = zoomRef.current;
             const pan = panOffsetRef.current;
 
@@ -476,7 +488,6 @@ const Room = ({ params }: { params: { id: string } }) => {
         );
       } catch (error) {
         console.error("Failed to initialize drawing:", error);
-        // Handle error (show toast, etc.)
       }
 
       const handleResize = () => {
@@ -485,30 +496,38 @@ const Room = ({ params }: { params: { id: string } }) => {
 
       window.addEventListener("resize", handleResize);
 
-      // Return cleanup function for this async setup
       return () => {
         window.removeEventListener("resize", handleResize);
         canvas.removeEventListener("dblclick", handleTextDoubleClick);
       };
     }
 
-    // Call the async function
     initializeCanvas().then((cleanupFn) => {
       if (cleanupFn) {
         cleanup = cleanupFn;
       }
     });
 
-    // Cleanup function for useEffect
     return () => {
-      isSubscribed = false; // Mark as unmounted
+      try {
+        if (isConnected) {
+          send({
+            type: "leave-room",
+            roomId: Number(roomId),
+          });
+        }
+      } catch (error) {
+        // WebSocket might already be closed, which is fine
+        console.log("Could not send leave-room (connection closed)");
+      }
+
+      isSubscribed = false;
       if (cleanup) {
         cleanup();
       }
     };
-  }, [isConnected, send]); // Add roomId as dependency if it can change
+  }, [isConnected, send]);
 
-  // Update cursor when tool changes
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -548,13 +567,32 @@ const Room = ({ params }: { params: { id: string } }) => {
   return (
     <div className='relative w-screen h-screen overflow-hidden'>
       {/* Text Input Overlay */}
+
+      <Badge
+        variant={"default"}
+        className='absolute rounded-xl px-3 py-2 top-2 right-3 z-50'>
+        <div className='flex gap-2 items-center'>
+          {isConnected ? (
+            <>
+              <span className='size-3 rounded-full bg-green-500'></span>
+              <div className='text-center font-bold '>Online</div>
+            </>
+          ) : (
+            <>
+              <span className='size-3 rounded-full bg-red-500'></span>
+              <div className='text-center font-bold '>Offline</div>
+            </>
+          )}
+        </div>
+      </Badge>
       {showPropertyPanel && (
         <PropertyPanel
           properties={currentProperties}
           onPropertyChange={(property: string, value) => {
             setCurrentProperties((prev) => ({ ...prev, [property]: value }));
             // If a shape is selected, update it
-            if (selectedShapeIndex !== null) {
+            console.log(selectedShapeId, "id");
+            if (selectedShapeId !== null) {
               handlePropertyChange(property, value);
             }
           }}

@@ -279,18 +279,18 @@ app.get("/rooms", authMiddleware, async (req, res) => {
         const rooms = await prisma.room.findMany({
             where: {
                 deletedAt: null,
-                OR: [
-                    {
-                        participants: {
-                            some: {
-                                userId: userId,
-                            },
-                        },
-                    },
-                    {
-                        adminId: userId,
-                    },
-                ],
+                // OR: [
+                //     {
+                //         participants: {
+                //             some: {
+                //                 userId: userId,
+                //             },
+                //         },
+                //     },
+                //     {
+                //         adminId: userId,
+                //     },
+                // ],
             },
             include: {
                 participants: true,
